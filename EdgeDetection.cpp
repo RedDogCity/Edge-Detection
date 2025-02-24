@@ -4,6 +4,7 @@
 // *** NOTE *** some function types may need to change from skeleton to implimentation
 
 #include <vector>
+using namespace std;
 
 // Main function to run everything
 int main()
@@ -46,10 +47,10 @@ struct Vector2 {
     Vector2( int x = 0, int y = 0 ) : x(x), y(y) {}
 };
 
-std::vector<std::vector<Vector2>> intensityGradient( int width, int height ) // parameters are temporary unless this works well (probably change to smoothed image as parameter)
+vector<vector<Vector2>> intensityGradient( int width, int height ) // parameters are temporary unless this works well (probably change to smoothed image as parameter)
 {
     // Create a 2D vector of Vector2 objects to store intensity gradients.
-    std::vector<std::vector<Vector2>> gradients(height, std::vector<Vector2>(width));
+    vector<vector<Vector2>> gradients(height, vector<Vector2>(width));
 
     // Calculate the intensity gradient of each pixel (round direction to the be one of the four edge directions ( | , - , / , \ ) )
     
@@ -60,7 +61,7 @@ std::vector<std::vector<Vector2>> intensityGradient( int width, int height ) // 
 
 
 // Apply gradient magnitude thresholding to find actual image edges from the gradients
-std::vector<std::vector<Vector2>> magnitudeThreshold( std::vector<std::vector<Vector2>> intensityGradients , double weakThresh ) // parameters are temporary unless this works well (probably change to smoothed image as parameter)
+vector<vector<Vector2>> magnitudeThreshold( vector<vector<Vector2>> intensityGradients , double weakThresh ) // parameters are temporary unless this works well (probably change to smoothed image as parameter)
 {
     
     // Remove all edges below threshold (set to 0 maybe)
@@ -72,7 +73,7 @@ std::vector<std::vector<Vector2>> magnitudeThreshold( std::vector<std::vector<Ve
 
 // Filter out noisey edges using threshold filter 
 // (Strong edges are accepted, weak are accepted if connected to strong)
-std::vector<std::vector<Vector2>> hysteresis( std::vector<std::vector<Vector2>> intensityGradients , double strongThresh ) // parameters are temporary unless this works well (probably change to smoothed image as parameter)
+vector<vector<Vector2>> hysteresis( vector<vector<Vector2>> intensityGradients , double strongThresh ) // parameters are temporary unless this works well (probably change to smoothed image as parameter)
 {
     
     // Remove all edges below threshold that arent connected to strong edge (set to 0 maybe)
@@ -83,7 +84,7 @@ std::vector<std::vector<Vector2>> hysteresis( std::vector<std::vector<Vector2>> 
 
 
 // Convert intesity gradients to image to show edges image (or midstep images)
-void convertToImage( std::vector<std::vector<Vector2>> intensityGradients ) // return type should be an image
+void convertToImage( vector<vector<Vector2>> intensityGradients ) // return type should be an image
 {
 
     // convert intesity gradients to an image format
