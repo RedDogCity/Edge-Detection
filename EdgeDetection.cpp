@@ -6,9 +6,12 @@
 #include <iostream>
 #include <fstream>
 #define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+#include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-#include <stb_image_write.h>
+#include "stb_image_write.h"
+#include <omp.h>
+#include <vector>
+
 using namespace std;
 
 // Vector2 struct
@@ -25,6 +28,18 @@ struct IntensityGradientImage {
     
     IntensityGradientImage( int h, int w, Vector2 * iga ) : height(h), width(w), intensityGradientArray(iga) {}
 };
+
+// 5x5 Gaussian kernel
+const double GAUSSIAN_KERNEL[5][5] = {
+    {1,  4,  7,  4, 1},
+    {4, 16, 26, 16, 4},
+    {7, 26, 41, 26, 7},
+    {4, 16, 26, 16, 4},
+    {1,  4,  7,  4, 1}
+};
+
+// sum of all kernel elements
+const double GAUSSIAN_SUM = 273.0; 
 
 // Gets image from file path and returns gray image as 2d vector
 IntensityGradientImage getImage(const char* imgPath) 
@@ -68,11 +83,41 @@ IntensityGradientImage getImage(const char* imgPath)
 
 
 // Apply a gausian filter to the image to smooth and remove noise
-IntensityGradientImage gausianFilter(IntensityGradientImage img)
-{
-    
+IntensityGradientImage gausianFilter(IntensityGradientImage img) {
+    // get image dimensions
+    int height = img.height;
+    int width = img.width;
 
-    return img;
+    // allocate memory for image
+    Vector2 *filteredImage = (Vector2 *)malloc(height * width * sizeof(Vector2));
+    
+    // parallel processing using OpenMP
+    #pragma omp parallel for collapse(2)
+
+    // for each pixel
+    for (int y = 2; y < height - 2; y++) {
+        for (int x = 2; x < width - 2; x++) {
+            double sum = 0.0;
+            
+            // apply 5x5 Gaussian kernel
+            for (int ky = -2; ky <= 2; ky++) {
+                for (int kx = -2; kx <= 2; kx++) {
+                    int imgX = x + kx;
+                    int imgY = y + ky;
+                    // apply weighted sum
+                    sum += img.intensityGradientArray[imgY * width + imgX].x * GAUSSIAN_KERNEL[ky + 2][kx + 2];
+                }
+            }
+            // normalize and store filtered value
+            filteredImage[y * width + x] = Vector2(sum / GAUSSIAN_SUM, 0.0);
+        }
+    }
+    
+    // free old memory
+    free(img.intensityGradientArray);
+
+    // return filtered image
+    return IntensityGradientImage(height, width, filteredImage);
 }
 
 // Calculate the gradients for each pixel
