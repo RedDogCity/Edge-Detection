@@ -75,7 +75,7 @@ IntensityGradientImage gausianFilter(IntensityGradientImage img)
     return img;
 }
 
-// Create a 2d array (vectors) of vector2's (structure) that represent the intesity gradients in the image (direction of edges)
+// Calculate the gradients for each pixel
 IntensityGradientImage intensityGradient(IntensityGradientImage intensityGradients)
 {
 
@@ -111,7 +111,7 @@ IntensityGradientImage hysteresis( IntensityGradientImage intensityGradients , d
 
 
 // Displays (sends to an output folder) image given by intensity gradient array
-void displayImage( Vector2 * intensityGradients )
+void displayImage( IntensityGradientImage intensityGradients )
 {
 
 
@@ -126,6 +126,17 @@ int main()
     // Get the image file an prep for transformation
     IntensityGradientImage img = getImage("./images/NYScene.jpg");
 
+    // Smooth the gray image using the gausian filter
+    img = gausianFilter(img);
+
+    // Calculate the gradient values for ech pixel
+    img = intensityGradient(img);
+
+    // Apply the magnitude threshold to remove unecessary "edges"
+    img = magnitudeThreshold(img, 0); // threshold value will need adjusting
+
+    // Apply hysteresis to keep only the strong edges (and the important weak edges)
+    img = magnitudeThreshold(img, 100); // threshold value will need adjusting
 
 
     // free img allocation
