@@ -114,7 +114,7 @@ IntensityGradientImage hysteresis( IntensityGradientImage intensityGradients , d
 void displayImage( IntensityGradientImage intensityGradients )
 {
 
-
+// Noah is doing this method
 
 }
 
