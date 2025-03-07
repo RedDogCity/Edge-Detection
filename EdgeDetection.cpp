@@ -161,11 +161,6 @@ IntensityGradientImage hysteresis(IntensityGradientImage intensityGradients, dou
     return intensityGradients;
 }
 
-// Displays (sends to an output folder) image given by intensity gradient array
-void displayImage(IntensityGradientImage intensityGradients)
-{
-}
-
 // From Betelgeuse
 void saveImage(const char *outputPath, IntensityGradientImage img)
 {
