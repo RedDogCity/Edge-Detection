@@ -34,18 +34,18 @@ After compilation, run the program with:
 
 Edge-Detection/
 
-│── .vscode/                # VS Code configuration files
-│── build/                  # (Optional) Directory for compiled files
-│── images/                 # Folder containing input images
-│   ├── NYScene.jpg
-│   ├── Rural.jpg
-│── EdgeDetection.cpp       # Main C++ source file
-│── EdgeDetection.exe       # Executable file (Windows)
-│── output.png              # Output image after processing
-│── stb_image.h             # Image loading library
-│── stb_image_write.h       # Image writing library
-│── .gitignore              # Git ignore file
-│── README.md               # Project documentation
+    .vscode/                # VS Code configuration files
+    build/                  # (Optional) Directory for compiled files
+    images/                 # Folder containing input images
+        -NYScene.jpg
+        -Rural.jpg
+    EdgeDetection.cpp       # Main C++ source file
+    EdgeDetection.exe       # Executable file (Windows)
+    output.png              # Output image after processing
+    stb_image.h             # Image loading library
+    stb_image_write.h       # Image writing library
+    .gitignore              # Git ignore file
+    README.md               # Project documentation
 
 
 # Required Files
