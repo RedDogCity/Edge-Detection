@@ -30,9 +30,10 @@ After compilation, run the program with:
 
 ./EdgeDetection
 
-# Project Structure
+## Project Structure
 
 Edge-Detection/
+
 │── .vscode/                # VS Code configuration files
 │── build/                  # (Optional) Directory for compiled files
 │── images/                 # Folder containing input images
@@ -45,6 +46,7 @@ Edge-Detection/
 │── stb_image_write.h       # Image writing library
 │── .gitignore              # Git ignore file
 │── README.md               # Project documentation
+
 
 # Required Files
 
