@@ -9,6 +9,7 @@
 #include <stb_image.h>
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
+#include <omp.h>
 using namespace std;
 
 // Vector2 struct
@@ -85,16 +86,39 @@ IntensityGradientImage intensityGradient(IntensityGradientImage intensityGradien
     return intensityGradients;
 }
 
-
-
 // Apply gradient magnitude thresholding to find actual image edges from the gradients
-IntensityGradientImage magnitudeThreshold( IntensityGradientImage intensityGradients , double weakThresh )
+IntensityGradientImage magnitudeThreshold(IntensityGradientImage intensityGradients, double weakThresh)
 {
+    // get the height and width of the image
+    int height = intensityGradients.height;
+    int width = intensityGradients.width;
     
-    // Remove all edges below threshold (set to 0 maybe)
+    // get the pointer to the gradient array
+    Vector2 *gradientArray = intensityGradients.intensityGradientArray;
 
+    // parallelize the nested loops using openmp
+    // collapse(2) merges the two loops into a single iteration space for efficiency
+    #pragma omp parallel for collapse(2)
+    for (int i = 0; i < height; i++) {
+        for (int j = 0; j < width; j++) {
+            // compute the 1d index for the 2d array
+            int idx = i * width + j;
+            
+            // retrieve the magnitude stored in the x component
+            double magnitude = gradientArray[idx].x;
+            
+            // suppress weak edges by setting their values to zero
+            if (magnitude < weakThresh) {
+                gradientArray[idx].x = 0.0;
+                gradientArray[idx].y = 0.0;
+            }
+        }
+    }
+
+    // return the modified intensity gradient image
     return intensityGradients;
 }
+
 
 
 
