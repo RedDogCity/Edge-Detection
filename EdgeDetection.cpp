@@ -1,8 +1,6 @@
 // This file is an implimentation of an edge detection model using the canny algorithm
 // This edge detection model is then improved using parallel programming concepts to decrease runtime
 
-// *** NOTE *** some function types may need to change from skeleton to implimentation
-
 #include <iostream>
 #include <fstream>
 #define STB_IMAGE_IMPLEMENTATION
@@ -10,9 +8,15 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 #include <omp.h>
+#include <thread>
+#include <mutex>
+#include <vector>
+#include <chrono>
 
 using namespace std;
 #include <cmath>
+
+bool MULTITHREAD_ACTIVE;
 
 // Vector2 struct
 struct Vector2
@@ -22,7 +26,7 @@ struct Vector2
     Vector2(double x = 0, double y = 0) : x(x), y(y) {}
 };
 
-// Intensity gradient struct
+// Intensity gradient struct (IGI)
 struct IntensityGradientImage
 {
     int height, width;
@@ -30,6 +34,55 @@ struct IntensityGradientImage
 
     IntensityGradientImage(int h, int w, Vector2 *iga) : height(h), width(w), intensityGradientArray(iga) {}
 };
+
+// *** Get Image Helper Functions *** //
+
+// Convert a single pixel from original img to the corresponding grayscaled intensity gradient array spot
+void handlePixelConversion(unsigned char* img_p, Vector2* iga_p)
+{
+    // Calculate average of RGB values and store it as intensity
+    *iga_p = Vector2(((*img_p + *(img_p + 1) + *(img_p + 2)) / 3.0f), 0.0f);
+}
+
+// Takes the original image and converts it to grayscale
+// Also stores the grayscale pixel values into the Intensity Gradient Array (IGA)
+void grayscaleIGI(unsigned char* img, size_t img_size, int channels, Vector2* iga)
+{
+    int i = 0;
+
+    if (!MULTITHREAD_ACTIVE) // Convert without multithreading
+    {
+        for (unsigned char* p = img; p != img + img_size; p += channels, i++)
+        {
+            handlePixelConversion(p, &iga[i]);
+        }
+    }
+    else // Convert with multithreading
+    {
+        vector<thread> threads;
+        int num_threads = 8; // Number of threads for batch processing
+        int chunk_size = img_size / (num_threads * channels); // Size of each chunk
+
+        // Split work into chunks
+        for (int t = 0; t < num_threads; ++t)
+        {
+            threads.push_back(thread([=]() {
+                for (int j = t * chunk_size; j < (t + 1) * chunk_size && j < img_size; ++j)
+                {
+                    unsigned char* p = img + j * channels;
+                    handlePixelConversion(p, &iga[j]);
+                }
+            }));
+        }
+
+        // Wait for all threads to finish
+        for (auto& t : threads) {
+            t.join();
+        }
+    }
+}
+
+
 
 // Gets image from file path and returns gray image as 2d vector
 IntensityGradientImage getImage(const char *imgPath)
@@ -58,13 +111,8 @@ IntensityGradientImage getImage(const char *imgPath)
         exit(1);
     }
 
-    // Convert each colored pixel in the original image to an average of the rgb values
-    // Store these pixel values in the intensities and initialize the gradient values to 0.0
-    int i = 0;
-    for (unsigned char *p = img; p != img + img_size; p += channels, i += 1)
-    {
-        gray_img[i] = Vector2(((*p + *(p + 1) + *(p + 2)) / 3.0), 0.0);
-    }
+    // Convert image to grayscale and to intensity gradient array format
+    grayscaleIGI(img, img_size, channels, gray_img);
 
     // create the actual Intensity Gradient Image variable using the creted array and the image dimensions
     IntensityGradientImage ret(height, width, gray_img);
@@ -228,6 +276,10 @@ void saveImage(const char *outputPath, IntensityGradientImage img)
 int main()
 {
 
+    MULTITHREAD_ACTIVE = true; // change this value if you want to activate/deactivate multithreading mode
+
+    auto start_time = chrono::high_resolution_clock::now(); // Start runtime clock
+
     // Get the image file an prep for transformation
     IntensityGradientImage img = getImage("./images/Rural.jpg");
 
@@ -246,6 +298,13 @@ int main()
     saveImage("output.png", img);
     // free img allocation
     stbi_image_free(img.intensityGradientArray); // Free memory
+
+    // End runtime clock
+    auto end_time = chrono::high_resolution_clock::now();
+    auto duration = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);
+
+    // Print results
+    cout << "Duration = " << duration.count() << " ms" << endl;
 
     return 0;
 }
