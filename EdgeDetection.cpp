@@ -159,7 +159,7 @@ IntensityGradientImage magnitudeThreshold(IntensityGradientImage intensityGradie
     #pragma omp parallel for collapse(2)
     for (int i = 0; i < height; i++) {
         for (int j = 0; j < width; j++) {
-            // compute the 1d index for the 2d array
+            // compute the 1d index for the 2d array.
             int idx = i * width + j;
             
             // retrieve the magnitude stored in the x component
