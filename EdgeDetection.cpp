@@ -121,7 +121,7 @@ IntensityGradientImage getImage(const char *imgPath)
 }
 
 // Apply a gausian filter to the image to smooth and remove noise
-IntensityGradientImage gausianFilter(IntensityGradientImage &img)
+IntensityGradientImage gausianFilter(IntensityGradientImage &img) // step 1
 {
 
     int width = img.width;
@@ -184,12 +184,64 @@ IntensityGradientImage gausianFilter(IntensityGradientImage &img)
 }
 
 // Calculate the gradients for each pixel
-IntensityGradientImage intensityGradient(IntensityGradientImage intensityGradients)
+IntensityGradientImage intensityGradient(IntensityGradientImage img) // step 2
 {
 
-    // Calculate the intensity gradient of each pixel (round direction to the be one of the four edge directions ( | , - , / , \ ) )
+    int width = img.width;
+    int height = img.height;
 
-    return intensityGradients;
+    // Allocate space for the gradient array (replace malloc)
+    Vector2 *gradArray = new Vector2[width * height];
+
+    if (gradArray == NULL)
+    {
+        printf("Memory allocation failed for gradient array.\n");
+        exit(1);
+    }
+
+    // Sobel kernels for x and y gradients
+    int Gx[3][3] = {
+        {-1, 0, 1},
+        {-2, 0, 2},
+        {-1, 0, 1}};
+
+    int Gy[3][3] = {
+        {1, 2, 1},
+        {0, 0, 0},
+        {-1, -2, -1}};
+
+    // Apply Sobel filter to calculate gradients
+    #pragma omp parallel for collapse(2)
+    for(int y = 1; y < height - 1; y++) // Avoid border pixels
+    {
+        for(int x = 1; x < width - 1; x++)
+        {
+            double gx = 0.0, gy = 0.0;
+
+            // Convolve with Sobel kernels
+            for(int ky = -1; ky <= 1; ky++)
+            {
+                for(int kx = -1; kx <= 1; kx++)
+                {
+                    int pixelIndex = (y + ky) * width + (x + kx);
+                    gx += img.intensityGradientArray[pixelIndex].x * Gx[ky + 1][kx + 1];
+                    gy += img.intensityGradientArray[pixelIndex].x * Gy[ky + 1][kx + 1];
+                }
+            }
+
+            // Compute magnitude and direction
+            double magnitude = sqrt(gx * gx + gy * gy);
+            double direction = atan2(gy, gx) * (180.0 / M_PI); // Convert to degrees
+
+            // Store the gradient magnitude and direction
+            int newIndex = y * width + x;
+            gradArray[newIndex] = Vector2(magnitude, direction);
+        }
+    }
+
+
+    // Calculate the intensity gradient of each pixel (round direction to the be one of the four edge directions ( | , - , / , \ ) )
+    return IntensityGradientImage(height, width, gradArray);
 }
 
 // Apply gradient magnitude thresholding to find actual image edges from the gradients
@@ -287,10 +339,10 @@ int main()
     img = gausianFilter(img);
 
     // // Calculate the gradient values for ech pixel
-    // img = intensityGradient(img);
+    img = intensityGradient(img);
 
     // // Apply the magnitude threshold to remove unecessary "edges"
-    // img = magnitudeThreshold(img, 0); // threshold value will need adjusting
+    img = magnitudeThreshold(img, 0); // threshold value will need adjusting
 
     // // Apply hysteresis to keep only the strong edges (and the important weak edges)
     // img = magnitudeThreshold(img, 100); // threshold value will need adjusting
