@@ -1,2 +1,6 @@
 .vscode/
 output/
+a.exe
+output.png
+.gitignore
+output.png
