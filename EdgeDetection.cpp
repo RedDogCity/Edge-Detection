@@ -6,6 +6,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
+#define STBIW_WINDOWS_UTF8
 #include "stb_image_write.h"
 #include <omp.h>
 #include <thread>
@@ -244,7 +245,6 @@ IntensityGradientImage intensityGradient(IntensityGradientImage img) // step 2
     return IntensityGradientImage(height, width, gradArray);
 }
 
-// Apply gradient magnitude thresholding to find actual image edges from the gradients
 IntensityGradientImage magnitudeThreshold(IntensityGradientImage intensityGradients, double weakThresh, double strongThresh)
 {
     // get the height and width of the image
@@ -254,25 +254,38 @@ IntensityGradientImage magnitudeThreshold(IntensityGradientImage intensityGradie
     // get the pointer to the gradient array
     Vector2 *gradientArray = intensityGradients.intensityGradientArray;
 
-    // parallelize the nested loops using openmp
-    // collapse(2) merges the two loops into a single iteration space for efficiency
-    #pragma omp parallel for collapse(2)
-    for (int i = 0; i < height; i++) {
-        for (int j = 0; j < width; j++) {
-            // compute the 1d index for the 2d array.
-            int idx = i * width + j;
-            
-            // retrieve the magnitude stored in the x component
-            double magnitude = gradientArray[idx].x;
+    // lambda function to process a single pixel
+    auto processPixel = [&](int i, int j) {
+        // compute the 1D index for the 2D array
+        int idx = i * width + j;
+        
+        // retrieve the magnitude stored in the x component
+        double magnitude = gradientArray[idx].x;
+        
+        // apply thresholding to classify edges
+        if (magnitude >= strongThresh) {
+            gradientArray[idx].x = 255.0; // Strong edge
+        } else if (magnitude >= weakThresh) {
+            gradientArray[idx].x = 128.0; // Weak edge
+        } else {
+            gradientArray[idx].x = 0.0; // Non-edge
+        }
+    };
 
-            if (magnitude >= strongThresh){
-                gradientArray[idx].x = 255.0;
+    // use OpenMP for parallel execution if multithreading is enabled
+    if (MULTITHREAD_ACTIVE) {
+        #pragma omp parallel for collapse(2)
+        for (int i = 0; i < height; i++) {
+            for (int j = 0; j < width; j++) {
+                processPixel(i, j);
             }
-            else if (magnitude >= weakThresh){
-                gradientArray[idx].x = 128.0; // weak edge
-            }
-            else{
-                gradientArray[idx].x = 0.0; // non-edge
+        }
+    } 
+    // otherwise, execute sequentially
+    else {
+        for (int i = 0; i < height; i++) {
+            for (int j = 0; j < width; j++) {
+                processPixel(i, j);
             }
         }
     }
@@ -280,6 +293,7 @@ IntensityGradientImage magnitudeThreshold(IntensityGradientImage intensityGradie
     // return the modified intensity gradient image
     return intensityGradients;
 }
+
 
 IntensityGradientImage nonMaximumSuppression(IntensityGradientImage img)
 {
