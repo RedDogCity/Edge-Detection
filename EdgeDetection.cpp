@@ -21,18 +21,18 @@ bool MULTITHREAD_ACTIVE;
 // Vector2 struct
 struct Vector2
 {
-    double x, y;
-
-    Vector2(double x = 0, double y = 0) : x(x), y(y) {}
+    double x, y; // x =  magnitude, y = direction
+    Vector2(double x = 0, double y = 0) : x(x), y(y) {} // constructor
 };
 
-// Intensity gradient struct (IGI)
+// Intensity gradient struct (IGI). Useful for passing around full image data.
 struct IntensityGradientImage
 {
-    int height, width;
-    Vector2 *intensityGradientArray;
+    int height, width; // holds the height and width of the image
+    Vector2 *intensityGradientArray; // pointer to a dynamic 1D array of Vector2 structs
 
-    IntensityGradientImage(int h, int w, Vector2 *iga) : height(h), width(w), intensityGradientArray(iga) {}
+    IntensityGradientImage(int h, int w, Vector2 *iga) // contructor with an initialzer list
+        : height(h), width(w), intensityGradientArray(iga) {}
 };
 
 // *** Get Image Helper Functions *** //
@@ -245,7 +245,7 @@ IntensityGradientImage intensityGradient(IntensityGradientImage img) // step 2
 }
 
 // Apply gradient magnitude thresholding to find actual image edges from the gradients
-IntensityGradientImage magnitudeThreshold(IntensityGradientImage intensityGradients, double weakThresh)
+IntensityGradientImage magnitudeThreshold(IntensityGradientImage intensityGradients, double weakThresh, double strongThresh)
 {
     // get the height and width of the image
     int height = intensityGradients.height;
@@ -264,11 +264,15 @@ IntensityGradientImage magnitudeThreshold(IntensityGradientImage intensityGradie
             
             // retrieve the magnitude stored in the x component
             double magnitude = gradientArray[idx].x;
-            
-            // suppress weak edges by setting their values to zero
-            if (magnitude < weakThresh) {
-                gradientArray[idx].x = 0.0;
-                gradientArray[idx].y = 0.0;
+
+            if (magnitude >= strongThresh){
+                gradientArray[idx].x = 255.0;
+            }
+            else if (magnitude >= weakThresh){
+                gradientArray[idx].x = 128.0; // weak edge
+            }
+            else{
+                gradientArray[idx].x = 0.0; // non-edge
             }
         }
     }
@@ -277,12 +281,116 @@ IntensityGradientImage magnitudeThreshold(IntensityGradientImage intensityGradie
     return intensityGradients;
 }
 
+IntensityGradientImage nonMaximumSuppression(IntensityGradientImage img)
+{
+    int width = img.width;
+    int height = img.height;
+    Vector2* inArr = img.intensityGradientArray;
+
+    // Output array to store suppressed results
+    Vector2* outArr = new Vector2[width * height];
+
+    #pragma omp parallel for collapse(2)
+    for (int y = 1; y < height - 1; y++) {
+        for (int x = 1; x < width - 1; x++) {
+            int idx = y * width + x;
+            double magnitude = inArr[idx].x;
+            double angle = inArr[idx].y;
+
+            // Normalize angle to [0, 180)
+            if (angle < 0) angle += 180;
+
+            double neighbor1 = 0.0, neighbor2 = 0.0;
+
+            // Quantize gradient direction into 4 sectors
+            if ((angle >= 0 && angle < 22.5) || (angle >= 157.5 && angle < 180)) {
+                // Horizontal (left–right)
+                neighbor1 = inArr[y * width + (x - 1)].x;
+                neighbor2 = inArr[y * width + (x + 1)].x;
+            }
+            else if (angle >= 22.5 && angle < 67.5) {
+                // Diagonal (↙ / ↗)
+                neighbor1 = inArr[(y - 1) * width + (x + 1)].x;
+                neighbor2 = inArr[(y + 1) * width + (x - 1)].x;
+            }
+            else if (angle >= 67.5 && angle < 112.5) {
+                // Vertical (top–bottom)
+                neighbor1 = inArr[(y - 1) * width + x].x;
+                neighbor2 = inArr[(y + 1) * width + x].x;
+            }
+            else if (angle >= 112.5 && angle < 157.5) {
+                // Diagonal (↖ / ↘)
+                neighbor1 = inArr[(y - 1) * width + (x - 1)].x;
+                neighbor2 = inArr[(y + 1) * width + (x + 1)].x;
+            }
+
+            // If current pixel is local maximum, keep it; else suppress
+            if (magnitude >= neighbor1 && magnitude >= neighbor2) {
+                outArr[idx] = Vector2(magnitude, inArr[idx].y); // keep
+            } else {
+                outArr[idx] = Vector2(0.0, 0.0); // suppress
+            }
+        }
+    }
+
+    // Clean up and assign new array
+    delete[] img.intensityGradientArray;
+    img.intensityGradientArray = outArr;
+    return img;
+}
+
 // Filter out noisey edges using threshold filter
 // (Strong edges are accepted, weak are accepted if connected to strong)
 IntensityGradientImage hysteresis(IntensityGradientImage intensityGradients, double strongThresh)
 {
+    int width = intensityGradients.width;
+    int height = intensityGradients.height;
+    Vector2* arr = intensityGradients.intensityGradientArray;
 
-    // Remove all edges below threshold that arent connected to strong edge (set to 0 maybe)
+    // 8-connected neighbor offsets
+    int dx[8] = {-1,  0, 1, -1, 1, -1, 0, 1};
+    int dy[8] = {-1, -1, -1,  0, 0,  1, 1, 1};
+
+    // Make a copy of the array to track updated states
+    Vector2* newArr = new Vector2[width * height];
+    memcpy(newArr, arr, sizeof(Vector2) * width * height);
+
+    // Loop through all pixels
+    #pragma omp parallel for collapse(2)
+    for (int y = 1; y < height - 1; y++) {
+        for (int x = 1; x < width - 1; x++) {
+            int idx = y * width + x;
+
+            // If pixel is weak (128)
+            if (arr[idx].x == 128.0) {
+                bool connectedToStrong = false;
+
+                // Check 8 neighbors
+                for (int k = 0; k < 8; k++) {
+                    int nx = x + dx[k];
+                    int ny = y + dy[k];
+                    int nidx = ny * width + nx;
+
+                    if (arr[nidx].x == 255.0) {
+                        connectedToStrong = true;
+                        break;
+                    }
+                }
+
+                // Update in new array
+                if (connectedToStrong) {
+                    newArr[idx].x = 255.0; // Promote to strong
+                } else {
+                    newArr[idx].x = 0.0;   // Suppress
+                    newArr[idx].y = 0.0;
+                }
+            }
+        }
+    }
+
+    // Free the old array and replace it
+    delete[] arr;
+    intensityGradients.intensityGradientArray = newArr;
 
     return intensityGradients;
 }
@@ -333,24 +441,18 @@ int main()
     auto start_time = chrono::high_resolution_clock::now(); // Start runtime clock
 
     // Get the image file an prep for transformation
-    IntensityGradientImage img = getImage("./images/Rural.jpg");
+    IntensityGradientImage img = getImage("./images/NYScene.jpg");
 
-    // Smooth the gray image using the gausian filter
-    img = gausianFilter(img);
-
-    // // Calculate the gradient values for ech pixel
-    img = intensityGradient(img);
-
-    // // Apply the magnitude threshold to remove unecessary "edges"
-    img = magnitudeThreshold(img, 0); // threshold value will need adjusting
-
-    // // Apply hysteresis to keep only the strong edges (and the important weak edges)
-    // img = magnitudeThreshold(img, 100); // threshold value will need adjusting
+   
+    img = gausianFilter(img); // Smooth the gray image using the gausian filter
+    img = intensityGradient(img); // Calculate the gradient values for ech pixel
+    img = nonMaximumSuppression(img); // Apply non-maximum suppression to thin the edges
+    img = magnitudeThreshold(img, 50, 100); // Apply the magnitude threshold to remove unecessary "edges"
+    img = hysteresis(img, 100); // Apply the hysteresis filter to remove weak edges
 
     saveImage("output.png", img);
-    // free img allocation
-    stbi_image_free(img.intensityGradientArray); // Free memory
 
+    delete[] img.intensityGradientArray; // free img allocation
     // End runtime clock
     auto end_time = chrono::high_resolution_clock::now();
     auto duration = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);
