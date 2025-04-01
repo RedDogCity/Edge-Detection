@@ -21,7 +21,7 @@ exampleuser@exampleuser-Think-408:~/Edge-Detection$
 
 Use the following command to compile the program:
 
-g++ -o EdgeDetection EdgeDetection.cpp -std=c++11 -lm
+g++ -o EdgeDetection EdgeDetection.cpp -std=c++11 -fopenmp -lm
 
 Ensure you have GCC installed before compiling.
 # 3. Run the Executable

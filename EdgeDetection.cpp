@@ -53,10 +53,10 @@ void forEachPixel2D(
     bool multithreaded,
     std::function<void(int y, int x)> pixelFunc)
 {
-    
+
     if (multithreaded)
     {
-    #pragma omp parallel for collapse(2)
+#pragma omp parallel for collapse(2)
         for (int y = y_start; y < y_end; y++)
         {
             for (int x = x_start; x < x_end; x++)
@@ -81,48 +81,25 @@ void forEachPixel2D(
 // Also stores the grayscale pixel values into the Intensity Gradient Array (IGA)
 void grayscaleIGI(unsigned char *img, size_t img_size, int channels, Vector2 *iga)
 {
-    int i = 0;
+    size_t gray_img_size = img_size / channels;
 
-    auto start_time = chrono::high_resolution_clock::now(); // Start runtime clock
-
-    if (!MULTITHREAD_ACTIVE) // Convert without multithreading
+    if (MULTITHREAD_ACTIVE)
     {
-        for (unsigned char *p = img; p != img + img_size; p += channels, i++)
+    #pragma omp parallel for
+        for (size_t i = 0; i < gray_img_size; i++)
         {
+            unsigned char *p = img + i * channels; 
+            handlePixelConversion(p, &iga[i]); // does the actual gray scaling
+        }
+    }
+    else
+    {
+        for (size_t i = 0; i < gray_img_size; i++)
+        {
+            unsigned char *p = img + i * channels;
             handlePixelConversion(p, &iga[i]);
         }
     }
-    else // Convert with multithreading
-    {
-        vector<thread> threads;
-        int num_threads = 8;                                  // Number of threads for batch processing
-        int chunk_size = img_size / (num_threads * channels); // Size of each chunk
-
-        // Split work into chunks
-        for (int t = 0; t < num_threads; ++t)
-        {
-            threads.push_back(thread([=]()
-                                     {
-                for (int j = t * chunk_size; j < (t + 1) * chunk_size && j < img_size; ++j)
-                {
-                    unsigned char* p = img + j * channels;
-                    handlePixelConversion(p, &iga[j]);
-                } }));
-        }
-
-        // Wait for all threads to finish
-        for (auto &t : threads)
-        {
-            t.join();
-        }
-    }
-
-    auto end_time = chrono::high_resolution_clock::now();
-    auto duration = chrono::duration_cast<chrono::milliseconds>(end_time - start_time);
-
-    // Print results
-    cout << "Duration of grayscaleIGI = " << duration.count() << " ms" << endl;
-
 }
 
 // Gets image from file path and returns gray image as 2d vector
@@ -160,9 +137,6 @@ IntensityGradientImage getImage(const char *imgPath)
 
     return ret;
 }
-
-
-
 
 void applyGaussianAtPixel(
     int y, int x,
@@ -335,6 +309,8 @@ IntensityGradientImage magnitudeThreshold(IntensityGradientImage intensityGradie
     // return the modified intensity gradient image
     return intensityGradients;
 }
+
+
 void suppressAtPixel(
     int y, int x,
     int width,
@@ -413,70 +389,68 @@ IntensityGradientImage nonMaximumSuppression(IntensityGradientImage img)
     return img;
 }
 
+void applyHysteresisAtPixel(
+    int x, int y,
+    int width,
+    Vector2* arr,
+    Vector2* newArr,
+    const int* dx,
+    const int* dy
+) {
+    int idx = y * width + x;
+
+    // Only apply to weak edges (value = 128)
+    if (arr[idx].x == 128.0) {
+        bool connectedToStrong = false;
+
+        // Check 8 neighbors
+        for (int k = 0; k < 8; k++) {
+            int nx = x + dx[k];
+            int ny = y + dy[k];
+            int nidx = ny * width + nx;
+
+            if (arr[nidx].x == 255.0) {
+                connectedToStrong = true;
+                break;
+            }
+        }
+
+        // Promote or suppress
+        if (connectedToStrong) {
+            newArr[idx].x = 255.0;
+        } else {
+            newArr[idx].x = 0.0;
+            newArr[idx].y = 0.0;
+        }
+    }
+}
+
 // Filter out noisey edges using threshold filter
 // (Strong edges are accepted, weak are accepted if connected to strong)
 IntensityGradientImage hysteresis(IntensityGradientImage intensityGradients, double strongThresh)
 {
     int width = intensityGradients.width;
     int height = intensityGradients.height;
-    Vector2 *arr = intensityGradients.intensityGradientArray;
+    Vector2* arr = intensityGradients.intensityGradientArray;
 
-    // 8-connected neighbor offsets
-    int dx[8] = {-1, 0, 1, -1, 1, -1, 0, 1};
-    int dy[8] = {-1, -1, -1, 0, 0, 1, 1, 1};
+    // 8-connected neighbors
+    const int dx[8] = {-1, 0, 1, -1, 1, -1, 0, 1};
+    const int dy[8] = {-1, -1, -1, 0, 0, 1, 1, 1};
 
-    // Make a copy of the array to track updated states
-    Vector2 *newArr = new Vector2[width * height];
+    // Copy the current array
+    Vector2* newArr = new Vector2[width * height];
     memcpy(newArr, arr, sizeof(Vector2) * width * height);
 
-// Loop through all pixels
-#pragma omp parallel for collapse(2)
-    for (int y = 1; y < height - 1; y++)
-    {
-        for (int x = 1; x < width - 1; x++)
-        {
-            int idx = y * width + x;
+    // Apply hysteresis check on all weak pixels
+    forEachPixel2D(1, width - 1, 1, height - 1, MULTITHREAD_ACTIVE, [&](int y, int x) {
+        applyHysteresisAtPixel(x, y, width, arr, newArr, dx, dy);
+    });
 
-            // If pixel is weak (128)
-            if (arr[idx].x == 128.0)
-            {
-                bool connectedToStrong = false;
-
-                // Check 8 neighbors
-                for (int k = 0; k < 8; k++)
-                {
-                    int nx = x + dx[k];
-                    int ny = y + dy[k];
-                    int nidx = ny * width + nx;
-
-                    if (arr[nidx].x == 255.0)
-                    {
-                        connectedToStrong = true;
-                        break;
-                    }
-                }
-
-                // Update in new array
-                if (connectedToStrong)
-                {
-                    newArr[idx].x = 255.0; // Promote to strong
-                }
-                else
-                {
-                    newArr[idx].x = 0.0; // Suppress
-                    newArr[idx].y = 0.0;
-                }
-            }
-        }
-    }
-
-    // Free the old array and replace it
     delete[] arr;
     intensityGradients.intensityGradientArray = newArr;
 
     return intensityGradients;
 }
-
 // From Betelgeuse
 void saveImage(const char *outputPath, IntensityGradientImage img)
 {
@@ -522,16 +496,15 @@ int main()
     auto start_time = chrono::high_resolution_clock::now(); // Start runtime clock
 
     // Get the image file an prep for transformation
-    IntensityGradientImage img = getImage("./images/Lion.jpg");
+    IntensityGradientImage img = getImage("./images/skullEmojiRealistic.jpg");
     std::cout << "OMP threads: " << omp_get_max_threads() << std::endl;
 
     img = gausianFilter(img);               // Smooth the gray image using the gausian filter
     img = intensityGradient(img);           // Calculate the gradient values for ech pixel
     img = nonMaximumSuppression(img);       // Apply non-maximum suppression to thin the edges
     img = magnitudeThreshold(img, 50, 100); // Apply the magnitude threshold to remove unecessary "edges"
-    img = hysteresis(img, 100);             // Apply the hysteresis filter to remove weak edges
+    img = hysteresis(img, 1000);             // Apply the hysteresis filter to remove weak edges
 
-    
     saveImage("output.png", img);
 
     delete[] img.intensityGradientArray; // free img allocation
